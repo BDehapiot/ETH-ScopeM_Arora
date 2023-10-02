@@ -1,4 +1,4 @@
-name: Python-Lite
+name: Arora
 
 channels:
   - conda-forge
@@ -13,6 +13,8 @@ dependencies:
   - joblib
   - matplotlib-base
   - pyyaml
+  - scikit-learn
+  - nd2
   - pip
   - pip:
     - napari[all]

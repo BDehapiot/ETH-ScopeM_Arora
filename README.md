@@ -1,10 +1,10 @@
 ![Python Badge](https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=rgb(149%2C157%2C165)&labelColor=rgb(50%2C60%2C65))  
 ![Author Badge](https://img.shields.io/badge/Author-Benoit_Dehapiot-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))
-![Date Badge](https://img.shields.io/badge/Created-2023--09--20-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))
+![Date Badge](https://img.shields.io/badge/Created-2023--10--02-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))
 ![License Badge](https://img.shields.io/badge/Licence-GNU%20General%20Public%20License%20v3.0-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))    
 
-# Template-Repo_Python-Lite
-Template repository for simple Python-based projects
+# ETH-ScopeM_Arora
+Phase-separated liquid droplets classification 
 ## Description
 
 ## Installation
@@ -13,7 +13,7 @@ In this tutorial, we will see how to install [Python](https://www.python.org/) u
 ### Download GitHub repository:  
 
 - Download this repository by clicking the following 
-[link](https://github.com/BDehapiot/Template-Repo_Python-Lite/archive/refs/heads/main.zip)  
+[link](https://github.com/BDehapiot/ETH-ScopeM_Arora/archive/refs/heads/main.zip)  
 - Unzip the downloaded folder to a known location (e.g. `Desktop`)
 
 ### Install Conda and create a new environment:
@@ -39,10 +39,10 @@ Select your operating system:
 
 - Move to your downloaded GitHub repository using the `cd` command: 
     ```bash
-    cd Desktop/Template-Repo_Python-Lite-main
+    cd Desktop/ETH-ScopeM_Arora-main
     ```
     Your prompt should change to reflect your current location:  
-    `(base) C:\Users\YourUsername\Desktop\Template-Repo_Python-Lite-main>`
+    `(base) C:\Users\YourUsername\Desktop\ETH-ScopeM_Arora-main>`
 
 - Create a new Conda environment (takes a few minutes): 
     ```bash
@@ -51,10 +51,10 @@ Select your operating system:
 
 - Activate the new environment:
     ```bash
-    conda activate Python-Lite
+    conda activate Arora
     ```
-    Your prompt should now display `(Python-Lite)` indicating that you have changed environment   
-    `(Python-Lite) C:\Users\YourUsername\Desktop\Template-Repo_Python-Lite-main>`
+    Your prompt should now display `(Arora)` indicating that you have changed environment   
+    `(Arora) C:\Users\YourUsername\Desktop\ETH-ScopeM_Arora-main>`
 
 </details> 
 
@@ -93,10 +93,10 @@ It is most likely located in your `Downloads` folder
 
 - Move to your downloaded GitHub repository: 
     ```bash
-    cd Desktop/Template-Repo_Python-Lite-main
+    cd Desktop/ETH-ScopeM_Arora-main
     ```
     Your prompt should change to reflect your current location:  
-    `(base) YourUsername@MacBook-Pro Desktop/Template-Repo_Python-Lite-main %`  
+    `(base) YourUsername@MacBook-Pro Desktop/ETH-ScopeM_Arora-main %`  
 
 - Create a new Conda environment (takes a few minutes):  
     ```bash
@@ -105,11 +105,11 @@ It is most likely located in your `Downloads` folder
 
 - Activate the new environment:
     ```bash
-    conda activate Python-Lite
+    conda activate Arora
     ```
 
-    Your prompt should now display `(Python-Lite)` indicating that you have changed environment  
-    `(Python-Lite) YourUsername@MacBook-Pro Desktop/Template-Repo_Python-Lite-main %`
+    Your prompt should now display `(Arora)` indicating that you have changed environment  
+    `(Arora) YourUsername@MacBook-Pro Desktop/ETH-ScopeM_Arora-main %`
 
 </details> 
 
@@ -119,7 +119,7 @@ To execute Python scripts, identifiable by their `.py` extension, you can either
 
 - Open your terminal and activate your new environment:  
     ```bash
-    conda activate Python-Lite
+    conda activate Arora
     ```
 
 - Install Spyder using pip (only the first time):
@@ -153,8 +153,9 @@ You can now browse the repository to open, modify and execute `.py` Python scrip
 - joblib
 - matplotlib-base
 - pyyaml
+- scikit-learn
+- nd2
 - pip
 
 ### pip
 - napari[all]
-- spyder
