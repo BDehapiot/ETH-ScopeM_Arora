@@ -13,6 +13,7 @@ dependencies:
   - joblib
   - matplotlib-base
   - pyyaml
+  - opencv
   - scikit-learn
   - nd2
   - pip

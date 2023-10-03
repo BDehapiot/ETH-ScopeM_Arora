@@ -1,14 +1,21 @@
 #%% Imports -------------------------------------------------------------------
 
+import cv2
 import nd2
+import time
 import numpy as np
+import pandas as pd
 from skimage import io 
 from pathlib import Path
 import matplotlib.pyplot as plt
+from scipy.stats import pearsonr
+from joblib import Parallel, delayed 
+from skimage.measure import regionprops
 from skimage.exposure import rescale_intensity
 from skimage.filters import gaussian, threshold_otsu
 from skimage.morphology import (
-    remove_small_holes, remove_small_objects, binary_dilation, label,
+    remove_small_holes, remove_small_objects, 
+    binary_dilation, label, white_tophat, disk
     )
 
 #%% Parameters ----------------------------------------------------------------
@@ -27,7 +34,7 @@ norm = "chn" # "none", "chn", "obj"
 #%% Initialize ----------------------------------------------------------------
 
 # Open data
-dataset = []
+alldata = []
 smn1_count, smn2_count, smn1m_count = 0, 0, 0
 for path in data_path.iterdir():
     
@@ -43,7 +50,7 @@ for path in data_path.iterdir():
         if "3-smn1" in name:        
             cond = "smn1"; smn1_count += 1
             img = img[11,...] 
-            dataset.append({
+            alldata.append({
                 "name": name,
                 "cond": cond,
                 "count": smn1_count,
@@ -54,7 +61,7 @@ for path in data_path.iterdir():
         if "13-smn2" in name:        
             cond = "smn2"; smn2_count += 1
             img = img[0:2,...]
-            dataset.append({
+            alldata.append({
                 "name": name,
                 "cond": cond,
                 "count": smn2_count,
@@ -68,7 +75,7 @@ for path in data_path.iterdir():
                 img = img[0:2,...]
             elif img.shape[0] == 4:
                 img = img[np.r_[0,2],...]
-            dataset.append({
+            alldata.append({
                 "name": name,
                 "cond": cond,
                 "count": smn1m_count,
@@ -77,10 +84,14 @@ for path in data_path.iterdir():
                 })
                        
 #%% Process -------------------------------------------------------------------
- 
-for i, data in enumerate(dataset):
+
+start = time.time()
+print('Process')
+
+for i, data in enumerate(alldata):
 
     img = data["img"]
+    name = data["name"]
     cond = data["cond"] 
     count = data["count"] 
     voxel = data["voxel"] 
@@ -89,10 +100,13 @@ for i, data in enumerate(dataset):
     c1, c2 = img[0,...], img[1,...]
     gblur = gaussian(np.mean(img, axis=0), sigma=sigma)
     mask = gblur > threshold_otsu(gblur) * thresh_coeff
+    
+    # Filter mask
     mask = remove_small_holes(mask, area_threshold=256)
     mask = remove_small_objects(mask, min_size=256)
-    outlines = binary_dilation(mask) ^ mask # display
-
+    outlines = binary_dilation(mask) ^ mask
+    labels = label(mask)
+    
     # Normalization
     if norm == "none":
         c1norm = c1.copy().astype("float32"); c1norm[mask==False] = np.nan
@@ -105,111 +119,180 @@ for i, data in enumerate(dataset):
         c2norm[mask==False] = np.nan
     
     if norm == "obj":
-        labels = label(mask)
         c1norm = np.full_like(c1, np.nan, dtype="float32")
         c2norm = np.full_like(c2, np.nan, dtype="float32")   
         for lab in np.unique(labels):
             if lab > 0:
-                idx = (labels == lab)
+                idx = labels == lab
                 c1val, c2val= c1[idx], c2[idx]
                 c1norm[idx] = rescale_intensity(c1val, out_range=(0,1))
                 c2norm[idx] = rescale_intensity(c2val, out_range=(0,1))
                 
-    # Append dataset
-    dataset[i]["mask"] = mask
-    dataset[i]["img_norm"] = np.stack((c1norm, c2norm), axis=0)
+    # Measure objects & display
 
-#%% Plot ----------------------------------------------------------------------    
+    objdisplay = np.zeros_like(c1, dtype="float32") 
+    objdata = {
+        "name": [], "cond": [], "count": [],
+        "area": [], "corr": [], 
+        "c1norm_crop": [], "c2norm_crop": [],
+        }
+    
+    for prop in regionprops(labels):
+        
+        lab = prop["label"]
+        area = prop["area"]
+        y, x = prop["centroid"]
+        bbox = prop["bbox"]
+        idx = labels == lab
+        c1norm_crop = c1norm[bbox[0]:bbox[2], bbox[1]:bbox[3]]
+        c2norm_crop = c2norm[bbox[0]:bbox[2], bbox[1]:bbox[3]]      
+        corr, p = pearsonr(c1norm[idx], c2norm[idx])
+        objdisplay = cv2.putText(
+            objdisplay, str(format(corr, '.3f')), (round(x), round(y)),
+            cv2.FONT_HERSHEY_DUPLEX, 0.75, (1,1,1), 1, cv2.LINE_AA
+            )       
+
+        # Append objdata
+        objdata["name"].append(name)
+        objdata["cond"].append(cond)
+        objdata["count"].append(count)
+        objdata["area"].append(area)
+        objdata["corr"].append(corr)
+        objdata["c1norm_crop"].append(c1norm_crop)
+        objdata["c2norm_crop"].append(c2norm_crop)
+                
+    # Append alldata
+    alldata[i]["mask"] = mask
+    alldata[i]["outlines"] = outlines
+    alldata[i]["labels"] = labels
+    alldata[i]["img_norm"] = np.stack((c1norm, c2norm), axis=0)
+    alldata[i]["objdata"] = objdata
+    alldata[i]["objdisplay"] = objdisplay
+
+# Extract objdata as dataframe
+objdata = pd.concat(
+    [pd.DataFrame(data["objdata"]) for data in alldata],
+    ignore_index=True,
+    )
+
+end = time.time()
+print(f'  {(end-start):5.3f} s')  
+
+#%% Plots ---------------------------------------------------------------------
  
-# Extract data
-smn1_c1val, smn1_c2val = [], []
-smn2_c1val, smn2_c2val = [], []  
-smn1m_c1val, smn1m_c2val = [], []  
-for data in dataset:
+# Area vs Pearson correlation -------------------------------------------------
+
+# # Extract data
+# smn1_area = objdata['area'][objdata['cond'] == "smn1"]
+# smn1_corr = objdata['corr'][objdata['cond'] == "smn1"]
+# smn2_area = objdata['area'][objdata['cond'] == "smn2"]
+# smn2_corr = objdata['corr'][objdata['cond'] == "smn2"]
+# smn1m_area = objdata['area'][objdata['cond'] == "smn1m"]
+# smn1m_corr = objdata['corr'][objdata['cond'] == "smn1m"]
+
+# # Plot
+# fig = plt.figure(figsize=(6, 12))
+# ax = plt.subplot(3, 1, 1)
+# plt.scatter(smn1_area, smn1_corr)
+# plt.axhline(0, color='black', linestyle='--', linewidth=0.75)
+# ax.axis([0, 10000, -1, 1])
+# plt.title("smn1")
+# ax = plt.subplot(3, 1, 2)
+# plt.scatter(smn2_area, smn2_corr)
+# plt.axhline(0, color='black', linestyle='--', linewidth=0.75)
+# ax.axis([0, 10000, -1, 1])
+# plt.title("smn2")
+# ax = plt.subplot(3, 1, 3)
+# plt.scatter(smn1m_area, smn1m_corr)
+# plt.axhline(0, color='black', linestyle='--', linewidth=0.75)
+# ax.axis([0, 10000, -1, 1])
+# plt.title("smn1m")
+
+# Pixel to pixle correlation --------------------------------------------------
+
+# # Extract data
+# smn1_c1val, smn1_c2val = [], []
+# smn2_c1val, smn2_c2val = [], []  
+# smn1m_c1val, smn1m_c2val = [], []  
+# for data in alldata:
     
-    cond = data["cond"]
-    mask = data["mask"]
-    c1_norm = data["img_norm"][0,...]
-    c2_norm = data["img_norm"][1,...]
+#     cond = data["cond"]
+#     mask = data["mask"]
+#     c1_norm = data["img_norm"][0,...]
+#     c2_norm = data["img_norm"][1,...]
     
-    if cond == "smn1":
-        smn1_c1val.append(c1_norm[mask])
-        smn1_c2val.append(c2_norm[mask])
-    if cond == "smn2":
-        smn2_c1val.append(c1_norm[mask])
-        smn2_c2val.append(c2_norm[mask])
-    if cond == "smn1m":
-        smn1m_c1val.append(c1_norm[mask])
-        smn1m_c2val.append(c2_norm[mask])
+#     if cond == "smn1":
+#         smn1_c1val.append(c1_norm[mask])
+#         smn1_c2val.append(c2_norm[mask])
+#     if cond == "smn2":
+#         smn2_c1val.append(c1_norm[mask])
+#         smn2_c2val.append(c2_norm[mask])
+#     if cond == "smn1m":
+#         smn1m_c1val.append(c1_norm[mask])
+#         smn1m_c2val.append(c2_norm[mask])
   
-# Format data
-smn1_c1val = np.concatenate(smn1_c1val)
-smn1_c2val = np.concatenate(smn1_c2val)
-smn2_c1val = np.concatenate(smn2_c1val)
-smn2_c2val = np.concatenate(smn2_c2val)
-smn1m_c1val = np.concatenate(smn1m_c1val)
-smn1m_c2val = np.concatenate(smn1m_c2val)
+# # Format data
+# smn1_c1val = np.concatenate(smn1_c1val)
+# smn1_c2val = np.concatenate(smn1_c2val)
+# smn2_c1val = np.concatenate(smn2_c1val)
+# smn2_c2val = np.concatenate(smn2_c2val)
+# smn1m_c1val = np.concatenate(smn1m_c1val)
+# smn1m_c2val = np.concatenate(smn1m_c2val)
    
-# Plot 
-vmin, vmax = 0, 500
-fig = plt.figure(figsize=(6, 12))
+# # Plot 
+# vmin, vmax = 0, 500
+# fig = plt.figure(figsize=(6, 12))
 
-ax = plt.subplot(3, 1, 1)
-plt.hist2d(
-    smn1_c1val, smn1_c2val, bins=(100, 100), 
-    cmap='plasma', vmin=vmin, vmax=vmax
-    )
-plt.colorbar(label='Density', ax=ax)
-plt.title("smn1")
+# ax = plt.subplot(3, 1, 1)
+# plt.hist2d(
+#     smn1_c1val, smn1_c2val, bins=(100, 100), 
+#     cmap='plasma', vmin=vmin, vmax=vmax
+#     )
+# plt.colorbar(label='Density', ax=ax)
+# plt.title("smn1")
 
-ax = plt.subplot(3, 1, 2)
-plt.hist2d(
-    smn2_c1val, smn2_c2val, bins=(100, 100), 
-    cmap='plasma', vmin=vmin, vmax=vmax
-    )
-plt.colorbar(label='Density', ax=ax)
-plt.title("smn2")
+# ax = plt.subplot(3, 1, 2)
+# plt.hist2d(
+#     smn2_c1val, smn2_c2val, bins=(100, 100), 
+#     cmap='plasma', vmin=vmin, vmax=vmax
+#     )
+# plt.colorbar(label='Density', ax=ax)
+# plt.title("smn2")
 
-ax = plt.subplot(3, 1, 3)
-plt.hist2d(
-    smn1m_c1val, smn1m_c2val, bins=(100, 100), 
-    cmap='plasma', vmin=vmin, vmax=vmax
-    )
-plt.colorbar(label='Density', ax=ax)
-plt.title("smn1m")
+# ax = plt.subplot(3, 1, 3)
+# plt.hist2d(
+#     smn1m_c1val, smn1m_c2val, bins=(100, 100), 
+#     cmap='plasma', vmin=vmin, vmax=vmax
+#     )
+# plt.colorbar(label='Density', ax=ax)
+# plt.title("smn1m")
 
-plt.show()
+# plt.show()
     
 #%% Save ----------------------------------------------------------------------
 
 # # Setup LUTs
 # val_range = np.arange(256, dtype='uint8')
+# lut_gray = np.stack([val_range, val_range, val_range])
 # lut_green = np.zeros((3, 256), dtype='uint8')
 # lut_green[1, :] = val_range
 # lut_magenta= np.zeros((3, 256), dtype='uint8')
 # lut_magenta[[0,2],:] = np.arange(256, dtype='uint8')
 
 # # Save images
-# for data in dataset:
+# for data in alldata:
     
-#     img = data["img"]
 #     img_norm = data["img_norm"]
+#     outlines = data["outlines"]
+#     objdisplay = data["objdisplay"]
 #     cond = data["cond"] 
 #     count = data["count"] 
 #     voxel = data["voxel"] 
-        
-#     # img 
-#     io.imsave(
-#         Path(data_path, 'task1', f"{cond}_{count:02}.tif"),
-#         img, check_contrast=False, imagej=True,
-#         resolution=(1 / voxel[0], 1 / voxel[1]),
-#         metadata={
-#             'axes': 'CYX', 
-#             'mode': 'color',
-#             'LUTs': [lut_magenta, lut_green],
-#             'unit': 'um',
-#             }
-#         )
+    
+#     # Add outlines to multichannel images
+#     outlines = outlines[np.newaxis, :, :].astype('float32') * 65535
+#     objdisplay = objdisplay[np.newaxis, :, :].astype('float32') * 65535
+#     img_norm = np.concatenate([img_norm, outlines, objdisplay], axis=0).astype('float32')
     
 #     # img_norm
 #     io.imsave(
@@ -218,10 +301,12 @@ plt.show()
 #         resolution=(1 / voxel[0], 1 / voxel[1]),
 #         metadata={
 #             'axes': 'CYX', 
-#             'mode': 'color',
-#             'LUTs': [lut_magenta, lut_green],
+#             'mode': 'composite',
+#             'LUTs': [lut_magenta, lut_green, lut_gray, lut_gray],
 #             'unit': 'um',
-#             }
+#             },
+#         photometric='minisblack',
+#         planarconfig='contig'
 #         )
                                         
 #%% Display -------------------------------------------------------------------       
