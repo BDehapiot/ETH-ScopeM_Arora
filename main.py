@@ -186,7 +186,7 @@ print(f'  {(end-start):5.3f} s')
 
 #%% Plots ---------------------------------------------------------------------
  
-# Area vs Pearson correlation -------------------------------------------------
+# Area v.s. Pearson correlation -----------------------------------------------
 
 # Extract data
 smn1_area = objdata['area'][objdata['cond'] == "smn1"]
@@ -214,7 +214,7 @@ plt.axhline(0, color='black', linestyle='--', linewidth=0.75)
 ax.axis([0, 10000, -1, 1])
 plt.title("smn1m")
 
-# Pixel to pixle correlation --------------------------------------------------
+# Pixel to pixel correlation --------------------------------------------------
 
 # Extract data
 smn1_c1val, smn1_c2val = [], []
